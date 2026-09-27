@@ -321,7 +321,7 @@ body.app{ min-height:100vh; }
 .catalog-box p{ color:var(--muted); font-size:11px; }
 
 .ep-player{ position:relative; width:100%; border-radius:13px; overflow:hidden; background:#05060A; user-select:none; border:1px solid var(--line); box-shadow:var(--shadow-md); }
-.ep-video{ width:100%; display:block; max-height:60vh; background:#000; aspect-ratio:16/9; object-fit:cover; }
+.ep-video{ width:100%; display:block; max-height:70vh; background:#000; object-fit:contain; }
 .ep-bigplay{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:58px; height:58px; border-radius:50%; border:none; cursor:pointer; background:rgba(229,30,36,0.92); color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 10px 28px rgba(0,0,0,0.4); transition:.15s ease; z-index:3; }
 .ep-bigplay:hover{ background:var(--player-red); transform:translate(-50%,-50%) scale(1.06); }
 .ep-bigplay.hidden{ display:none; }
