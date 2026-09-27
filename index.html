@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduNova — منصتك التعليمية</title>
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="platform.css">
+<style>body{ padding-top:64px; }</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<section class="section">
+  <div class="container hero">
+    <div>
+      <h1>ذاكر وامتحن نفسك في مكان واحد <span class="grad-text">بشكل منظم واحترافي</span></h1>
+      <p>EduNova منصتك التعليمية اللي بتجمعلك كورساتك كلها في مكان واحد — فيديوهات وملفات وامتحانات جوه كل درس، بتصميم واضح وسهل يريحك وانت بتذاكر.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" href="signup.html">ابدأ دلوقتي — أنشئ حسابك 🚀</a>
+        <a class="btn btn-ghost btn-lg" href="login.html">عندي حساب بالفعل</a>
+      </div>
+    </div>
+    <div class="hero-visual glass">
+      <div class="frame">
+        <div class="tag">📚 كورساتك كلها منظمة في مكان واحد</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <h2>رحلتك في 3 خطوات بسيطة</h2>
+        <p>من إنشاء الحساب لحد ما تبدأ أول محاضرة، كل حاجة واضحة قدامك.</p>
+      </div>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card glass">
+        <div class="num">1</div>
+        <h3>أنشئ حسابك</h3>
+        <p>سجّل ببياناتك ورقم موبايلك، وهنبعتلك كود تحقق على SMS للتأكد إن الرقم بتاعك.</p>
+      </div>
+      <div class="step-card glass">
+        <div class="num">2</div>
+        <h3>استعرض الكورسات</h3>
+        <p>هتلاقي كل الكورسات المتاحة معروضة في كروت واضحة، بصورة واسم ووصف لكل كورس.</p>
+      </div>
+      <div class="step-card glass">
+        <div class="num">3</div>
+        <h3>ذاكر وامتحن جوه الدرس</h3>
+        <p>افتح المحاضرة، تابع الفيديو أو الملف، وامتحن نفسك في نفس المكان من غير ما تسيب الصفحة.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="footer">EduNova — Developed By Abdelrahman Mohamed</div>
+
+<script type="module">
+import { renderAuthTopbar, getStudent } from "./platform.js";
+if (getStudent()) window.location.replace("home.html");
+renderAuthTopbar();
+</script>
+</body>
+</html>

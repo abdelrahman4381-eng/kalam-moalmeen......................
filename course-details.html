@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تفاصيل الكورس - EduNova</title>
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="platform.css">
+</head>
+<body class="app">
+
+<header class="topbar" id="topbar"></header>
+<div class="app-layout" id="appLayout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main" id="mainContent">
+    <div class="skeleton" style="min-height:400px;"></div>
+  </main>
+</div>
+
+<div class="footer">EduNova — Developed By Abdelrahman Mohamed</div>
+
+<script type="module">
+import {
+  db, doc, getDoc, requireStudent, renderShell, escapeHtml, safeImageUrl,
+  fetchCourse, fetchFlatSections, getEnrollment, enrollFree, canAccessCourse,
+  redeemCode, isSectionUnlocked, markSectionComplete, bumpSectionAttempts,
+  createCustomPlayer, renderExamWidget, courseProgressPercent,
+  showLoading, hideLoading, showPopup
+} from "./platform.js";
+
+const student = requireStudent();
+let course = null, lectures = [], flat = [], enrollment = null, unlocked = false;
+let activeSectionId = null;
+let activeVideoDestroy = null;
+const appLayout = document.getElementById("appLayout");
+
+if (student) {
+  renderShell("courses");
+  load();
+}
+
+function qs(name) { return new URLSearchParams(window.location.search).get(name); }
+
+async function load() {
+  const id = qs("id");
+  const main = document.getElementById("mainContent");
+  if (!id) { main.innerHTML = notFound(); return; }
+
+  try {
+    course = await fetchCourse(id);
+    if (!course) { main.innerHTML = notFound(); return; }
+
+    const res = await fetchFlatSections(id);
+    lectures = res.lectures;
+    flat = res.flat;
+    enrollment = await getEnrollment(student.id, id);
+    unlocked = await canAccessCourse(student.id, course);
+
+    if (!unlocked) renderIntro();
+    else renderLessonPage();
+  } catch (e) {
+    console.error(e);
+    main.innerHTML = notFound();
+  }
+}
+
+/* ================= INTRO (course not unlocked yet) ================= */
+function renderIntro() {
+  appLayout.classList.remove("has-lessons");
+  const main = document.getElementById("mainContent");
+  const img = safeImageUrl(course.thumbnail);
+
+  main.innerHTML = `
+    <div class="crumbs"><a href="courses.html">🎓 الكورسات</a> <span>/</span> <span>${escapeHtml(course.name || "تفاصيل الكورس")}</span></div>
+    <div class="details">
+      <div class="details-main glass">
+        <div class="thumb">
+          ${course.isFree ? `<span class="price-badge free">مجاني</span>` : `<span class="price-badge paid">${course.price ? escapeHtml(course.price) + " ج.م" : "مدفوع"}</span>`}
+          ${img ? `<img src="${img}" alt="">` : `<span class="ph">🎓</span>`}
+        </div>
+        <div class="details-body">
+          ${course.grade ? `<span class="grade-badge">${escapeHtml(course.grade)}</span>` : ""}
+          <h1>${escapeHtml(course.name || "كورس")}</h1>
+          <p class="desc">${escapeHtml(course.description || "")}</p>
+        </div>
+      </div>
+      <div class="details-side glass">
+        <h3>محتوى الكورس</h3>
+        <div class="info-list">
+          <div class="info-item"><span class="ic">📚</span><div><small>عدد المحاضرات</small><b>${lectures.length}</b></div></div>
+          <div class="info-item"><span class="ic">📄</span><div><small>عدد الأقسام</small><b>${flat.length}</b></div></div>
+        </div>
+        ${redeemBoxHtml()}
+      </div>
+    </div>
+    <div class="section-head" style="margin-top:22px;"><div><h2>محتوى الكورس</h2><p>افتح الكورس عشان توصل للمحتوى.</p></div></div>
+    ${lectures.length ? `<div class="lesson-list">${lectures.map(lec => `
+      <div class="lesson-row locked">
+        <div class="num">${lec.order ?? ""}</div>
+        <div class="info"><b>${escapeHtml(lec.title || "محاضرة")}</b><small>افتح الكورس عشان توصل للمحتوى</small></div>
+        <div class="state">🔒</div>
+      </div>`).join("")}</div>` : `<div class="empty-state glass"><div class="big">📭</div><h3>لسه مفيش محتوى مضاف</h3></div>`}
+  `;
+  wireRedeemBox();
+}
+
+function redeemBoxHtml() {
+  return `
+    <div class="redeem-box" style="margin-top:4px;">
+      ${course.isFree ? "" : `
+        <div class="field">
+          <label>عندك كود؟</label>
+          <input id="codeInput" placeholder="XXXXX-XXXXX" maxlength="11">
+        </div>
+        <button class="btn btn-primary btn-block" id="redeemBtn">فعّل الكود 🔑</button>
+        <div class="msg" id="redeemMsg"></div>
+      `}
+      ${course.isFree ? `<button class="btn btn-primary btn-block" id="enrollFreeBtn">ابدأ الكورس مجانًا 🚀</button>` : ""}
+    </div>`;
+}
+
+function wireRedeemBox() {
+  const redeemBtn = document.getElementById("redeemBtn");
+  if (redeemBtn) {
+    redeemBtn.onclick = async () => {
+      const msg = document.getElementById("redeemMsg");
+      const code = document.getElementById("codeInput").value.trim();
+      if (!code) { msg.className = "msg error"; msg.textContent = "اكتب الكود الأول"; return; }
+      redeemBtn.disabled = true;
+      showLoading("بنتحقق من الكود... 🔍");
+      try {
+        await redeemCode(student.id, code);
+        hideLoading();
+        showPopup("🎉", "اتفتح الكورس", "الكود اشتغل والكورس بقى متاح ليك", () => window.location.reload());
+      } catch (e) {
+        hideLoading(); redeemBtn.disabled = false;
+        msg.className = "msg error"; msg.textContent = e.message || "الكود مش صحيح";
+      }
+    };
+  }
+  const freeBtn = document.getElementById("enrollFreeBtn");
+  if (freeBtn) {
+    freeBtn.onclick = async () => {
+      freeBtn.disabled = true;
+      showLoading("بنفتحلك الكورس... 🚀");
+      try {
+        await enrollFree(student.id, course.id);
+        hideLoading();
+        window.location.reload();
+      } catch (e) {
+        hideLoading(); freeBtn.disabled = false;
+        showPopup("🔥", "حصلت مشكلة", "جرب تاني بعد شوية 🙏");
+      }
+    };
+  }
+}
+
+/* ================= LESSON PAGE (unlocked: sidebar + main + lessons column) ================= */
+function renderLessonPage() {
+  appLayout.classList.add("has-lessons");
+  if (!document.getElementById("lessonsCol")) {
+    const col = document.createElement("aside");
+    col.className = "lessons-col";
+    col.id = "lessonsCol";
+    appLayout.appendChild(col);
+  }
+  renderLessonsColumn();
+
+  const firstOpen = flat.find((s, i) => isSectionUnlocked(flat, enrollment, i));
+  if (firstOpen) openSection(firstOpen.id);
+  else document.getElementById("mainContent").innerHTML = coursePlaceholder();
+}
+
+function renderLessonsColumn() {
+  const col = document.getElementById("lessonsCol");
+  if (!col) return;
+
+  const idx = flat.findIndex(s => s.id === activeSectionId);
+  const prevOpen = idx > 0 && isSectionUnlocked(flat, enrollment, idx - 1);
+  const nextOpen = idx >= 0 && idx < flat.length - 1 && isSectionUnlocked(flat, enrollment, idx + 1);
+
+  let html = `
+    <div class="lesson-nav-row">
+      <button id="prevLessonBtn" ${prevOpen ? "" : "disabled"}>‹ السابق</button>
+      <button id="nextLessonBtn" ${nextOpen ? "" : "disabled"}>التالي ›</button>
+    </div>
+    <div class="lessons-notice">لازم تخلّص القسم اللي قبل عشان يتفتح اللي بعده. الامتحانات هنا بسيطة وبدون أي قفل شاشة أو تتبع.</div>
+  `;
+
+  lectures.forEach(lec => {
+    const sections = flat.filter(s => s.lectureId === lec.id);
+    if (!sections.length) return;
+    html += `<div class="lecture-title">${escapeHtml(lec.title || "محاضرة")}</div>`;
+    html += sections.map(s => lessonItemHtml(s)).join("");
+  });
+
+  col.innerHTML = html;
+
+  col.querySelectorAll(".lesson-item[data-section]").forEach(el => {
+    el.onclick = () => openSection(el.dataset.section);
+  });
+  const prevBtn = document.getElementById("prevLessonBtn");
+  const nextBtn = document.getElementById("nextLessonBtn");
+  if (prevBtn && !prevBtn.disabled) prevBtn.onclick = () => openSection(flat[idx - 1].id);
+  if (nextBtn && !nextBtn.disabled) nextBtn.onclick = () => openSection(flat[idx + 1].id);
+}
+
+function lessonItemHtml(s) {
+  const done = (enrollment?.completedSections || []).includes(s.id);
+  const open = isSectionUnlocked(flat, enrollment, s.flatIndex);
+  const active = activeSectionId === s.id;
+  const typeIcon = s.type === "video" ? "🎬" : s.type === "file" ? "📎" : "📝";
+  const typeLabel = s.type === "video" ? "فيديو" : s.type === "file" ? "ملف" : "امتحان";
+  const check = done ? "✓" : !open ? "🔒" : typeIcon;
+  const stateClass = done ? "" : open ? "pending" : "locked";
+  return `
+    <div class="lesson-item ${active ? "active" : ""} ${stateClass}" ${open ? `data-section="${s.id}"` : ""}>
+      <div class="lesson-check">${check}</div>
+      <div class="lesson-name">${escapeHtml(s.title || "قسم")}<small>${typeLabel}</small></div>
+      <div class="lesson-arrow">‹</div>
+    </div>`;
+}
+
+function coursePlaceholder() {
+  return `<div class="placeholder"><div class="big">🔒</div><p>لسه مفيش قسم متاح دلوقتي</p></div>`;
+}
+
+/* ================= SECTION SELECTION / RENDER ================= */
+function teardownActiveMedia() {
+  if (activeVideoDestroy) { activeVideoDestroy(); activeVideoDestroy = null; }
+}
+
+async function openSection(sectionId) {
+  teardownActiveMedia();
+  const idx = flat.findIndex(s => s.id === sectionId);
+  if (idx === -1 || !isSectionUnlocked(flat, enrollment, idx)) {
+    showPopup("🔒", "القسم ده مقفول", "خلّص القسم اللي قبله الأول عشان يتفتح ده.");
+    return;
+  }
+  activeSectionId = sectionId;
+  renderLessonsColumn();
+  await renderActiveSection(flat[idx]);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function renderActiveSection(section) {
+  const main = document.getElementById("mainContent");
+  if (section.type === "video") return renderVideoSection(main, section);
+  if (section.type === "file") return renderFileSection(main, section);
+  if (section.type === "exam") return renderExamSection(main, section);
+  main.innerHTML = coursePlaceholder();
+}
+
+/* ---- VIDEO ---- */
+function renderVideoSection(main, section) {
+  const videoUrl = safeImageUrl(section.videoUrl);
+  const done = (enrollment?.completedSections || []).includes(section.id);
+
+  main.innerHTML = `
+    ${videoUrl ? `
+      <section class="video-wrap" id="videoWrap"></section>
+      <div class="video-meta">
+        <h1>${escapeHtml(section.title || "الفيديو")}</h1>
+        <p>${escapeHtml(course.name || "")}</p>
+        <div class="video-meta-row"><span>👨🏻‍🏫 ${escapeHtml(course.instructor || "المحاضر")}</span>${section.duration ? `<span>⏱ ${escapeHtml(section.duration)}</span>` : ""}</div>
+      </div>
+    ` : `<div class="placeholder"><div class="big">🎬</div><p>الفيديو مش متاح دلوقتي</p></div>`}
+    ${section.description ? `<div class="description-box"><strong>تفاصيل المحاضرة</strong><br>${escapeHtml(section.description)}</div>` : ""}
+    <div id="sectionStatus" style="margin-top:16px;"></div>
+  `;
+
+  renderCompletionStatus(done, section);
+  if (!videoUrl) return;
+
+  const wrap = document.getElementById("videoWrap");
+  const { video, destroy } = createCustomPlayer(wrap, videoUrl);
+  activeVideoDestroy = destroy;
+
+  video.addEventListener("ended", async () => {
+    if ((enrollment?.completedSections || []).includes(section.id)) return;
+    await markSectionComplete(student.id, course.id, section.id);
+    enrollment = await getEnrollment(student.id, course.id);
+    renderLessonsColumn();
+    renderCompletionStatus(true, section);
+    showPopup("✅", "تمام كده", "خلصت القسم! تقدر تكمل اللي بعده دلوقتي.");
+  });
+}
+
+/* ---- FILE ---- */
+function renderFileSection(main, section) {
+  const f = section.file || {};
+  const url = safeImageUrl(f.url);
+  const done = (enrollment?.completedSections || []).includes(section.id);
+
+  main.innerHTML = `
+    <div class="placeholder" style="min-height:220px;">
+      <div class="big">📎</div>
+      <h1 style="font-size:16px;margin-bottom:8px;">${escapeHtml(section.title || "الملف")}</h1>
+      <p style="margin-bottom:14px;">${escapeHtml(f.name || "ملف القسم")}</p>
+      ${url ? `<a class="btn btn-primary" href="${url}" target="_blank" rel="noopener">فتح الملف ⬇️</a>` : ""}
+    </div>
+    <div id="sectionStatus" style="margin-top:16px;"></div>
+  `;
+
+  if (done) { renderCompletionStatus(true, section); return; }
+  const box = document.getElementById("sectionStatus");
+  box.innerHTML = `<button class="btn btn-primary btn-block" id="markReadBtn">تم الاطلاع ✅</button>`;
+  document.getElementById("markReadBtn").onclick = async () => {
+    await markSectionComplete(student.id, course.id, section.id);
+    enrollment = await getEnrollment(student.id, course.id);
+    renderLessonsColumn();
+    renderCompletionStatus(true, section);
+  };
+}
+
+/* ---- EXAM: rendered inline in the main column, same simple
+   non-proctored widget used everywhere else. ---- */
+async function renderExamSection(main, section) {
+  const done = (enrollment?.completedSections || []).includes(section.id);
+  main.innerHTML = `<h1 style="font-size:16px;margin-bottom:14px;">${escapeHtml(section.title || "امتحان القسم")}</h1><div id="sectionStatus"></div>`;
+  if (done) { renderCompletionStatus(true, section); return; }
+
+  const statusBox = document.getElementById("sectionStatus");
+  try {
+    const examSnap = await getDoc(doc(db, "exams", section.examId));
+    if (!examSnap.exists()) {
+      statusBox.innerHTML = `<div class="msg error">امتحان القسم ده مش موجود، كلّم المدير 🙏</div>`;
+      return;
+    }
+    const passingScore = typeof section.passingScore === "number" ? section.passingScore : 50;
+
+    await bumpSectionAttempts(student.id, course.id, section.id);
+    await renderExamWidget(statusBox, section.examId, student, {
+      onFinish: async (attempt) => {
+        const passed = typeof attempt.percent === "number" ? attempt.percent >= passingScore : true;
+        if (passed) {
+          await markSectionComplete(student.id, course.id, section.id);
+          enrollment = await getEnrollment(student.id, course.id);
+          renderLessonsColumn();
+          const btnWrap = document.createElement("div");
+          btnWrap.style.marginTop = "14px";
+          appendNextButton(btnWrap, section);
+          statusBox.appendChild(btnWrap);
+        }
+      }
+    });
+  } catch (e) {
+    console.error(e);
+    statusBox.innerHTML = `<div class="msg error">حصلت مشكلة في تحميل الامتحان.</div>`;
+  }
+}
+
+function renderCompletionStatus(done, section) {
+  const box = document.getElementById("sectionStatus");
+  if (!box) return;
+  if (!done) {
+    box.innerHTML = `<div class="msg">${
+      section.type === "video" ? "شاهد الفيديو لحد آخره عشان يتفتح اللي بعده."
+      : section.type === "file" ? "افتح الملف واطّلع عليه."
+      : "لازم تعدي الامتحان."
+    }</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="msg success" style="margin-bottom:12px;">✅ خلصت القسم ده</div>`;
+  appendNextButton(box, section);
+}
+
+function appendNextButton(container, section) {
+  const nextSection = flat[section.flatIndex + 1];
+  const btn = document.createElement(nextSection ? "button" : "a");
+  btn.className = "btn btn-primary btn-block";
+  if (nextSection) {
+    btn.textContent = "القسم التالي ⬅️";
+    btn.onclick = () => openSection(nextSection.id);
+  } else {
+    btn.textContent = "رجوع لأول الكورس 🎓";
+    btn.href = `course-details.html?id=${encodeURIComponent(course.id)}`;
+  }
+  container.appendChild(btn);
+}
+
+function notFound() {
+  return `
+    <div class="empty-state glass">
+      <div class="big">🔍</div>
+      <h3>الكورس ده مش موجود</h3>
+      <p>ممكن يكون اتحذف أو الرابط غلط.</p>
+      <a class="btn btn-primary" href="courses.html">رجوع للكورسات</a>
+    </div>`;
+}
+</script>
+</body>
+</html>

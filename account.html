@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حسابي - EduNova</title>
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="platform.css">
+</head>
+<body class="app">
+
+<header class="topbar" id="topbar"></header>
+<div class="app-layout" id="appLayout">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main">
+    <div class="page-title">حسابي</div>
+    <div class="page-sub">كل بياناتك — نتائجك وتقدمك في الكورسات في مكان واحد.</div>
+
+    <div class="account-grid">
+      <div class="profile-card glass">
+        <div class="avatar" id="avatarLetter">?</div>
+        <h2 id="pName">--</h2>
+        <div class="kv">
+          <div><small>رقم الدخول (الموبايل)</small><b class="ltr" id="pPhone">--</b></div>
+          <div><small>رقم موبايل الأب</small><b class="ltr" id="pFatherPhone">--</b></div>
+          <div><small>رقم موبايل الأم</small><b class="ltr" id="pMotherPhone">--</b></div>
+          <div><small>البريد الإلكتروني</small><b class="ltr" id="pEmail">--</b></div>
+          <div><small>كود الطالب</small><b class="ltr" id="pCode">--</b></div>
+        </div>
+        <button class="btn btn-danger btn-block" id="logoutBtn">تسجيل الخروج</button>
+      </div>
+
+      <div>
+        <div class="tab-strip">
+          <button class="tab-btn active" data-tab="courses">كورساتي وتقدمي</button>
+          <button class="tab-btn" data-tab="results">نتائج امتحاناتي</button>
+        </div>
+
+        <div class="tab-panel show glass attempts" id="tab-courses">
+          <h3>كورساتي وتقدمي</h3>
+          <div id="myCoursesList"><div class="skeleton" style="min-height:120px;"></div></div>
+        </div>
+
+        <div class="tab-panel glass attempts" id="tab-results">
+          <h3>نتائج امتحاناتي</h3>
+          <div id="attemptsList"><div class="skeleton" style="min-height:120px;"></div></div>
+          <div id="resultPanel"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="footer">EduNova — Developed By Abdelrahman Mohamed</div>
+
+<script type="module">
+import {
+  db, doc, getDoc, collection, getDocs,
+  requireStudent, renderShell, logout, escapeHtml, safeImageUrl,
+  fetchCourses, getEnrollment, fetchFlatSections, courseProgressPercent,
+  renderExamWidget
+} from "./platform.js";
+
+const student = requireStudent();
+if (student) {
+  renderShell("account");
+  document.getElementById("logoutBtn").onclick = logout;
+  wireTabs();
+  loadProfile();
+  loadMyCourses();
+  loadAttempts();
+}
+
+function wireTabs() {
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("show"));
+      btn.classList.add("active");
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("show");
+    };
+  });
+}
+
+async function loadProfile() {
+  document.getElementById("pName").textContent = student.name || "--";
+  document.getElementById("pPhone").textContent = student.phone || "--";
+  document.getElementById("pCode").textContent = student.code || "--";
+  document.getElementById("avatarLetter").textContent = (student.name || "؟").trim().charAt(0);
+
+  try {
+    const snap = await getDoc(doc(db, "students", student.id));
+    if (snap.exists()) {
+      const d = snap.data();
+      document.getElementById("pFatherPhone").textContent = d.fatherPhone || "--";
+      document.getElementById("pMotherPhone").textContent = d.motherPhone || "--";
+      document.getElementById("pEmail").textContent = d.email || "--";
+    }
+  } catch (e) { console.error(e); }
+}
+
+async function loadMyCourses() {
+  const box = document.getElementById("myCoursesList");
+  try {
+    const courses = await fetchCourses();
+    const mine = [];
+    for (const c of courses) {
+      const enr = await getEnrollment(student.id, c.id);
+      if (c.isFree || enr) mine.push({ course: c, enrollment: enr });
+    }
+
+    if (!mine.length) {
+      box.innerHTML = `<div class="empty-state"><div class="big">🎓</div><h3>لسه مشتركتش في أي كورس</h3><a class="btn btn-primary" href="courses.html">استعرض الكورسات</a></div>`;
+      return;
+    }
+
+    const rows = [];
+    for (const { course, enrollment } of mine) {
+      let percent = 0;
+      try {
+        const { flat } = await fetchFlatSections(course.id);
+        percent = courseProgressPercent(flat, enrollment);
+      } catch (e) { /* ignore */ }
+      const img = safeImageUrl(course.thumbnail);
+      rows.push(`
+        <a class="mycourse-row" href="course-details.html?id=${encodeURIComponent(course.id)}">
+          <div class="th">${img ? `<img src="${img}" alt="">` : "🎓"}</div>
+          <div class="info">
+            <b>${escapeHtml(course.name || "كورس")}</b>
+            <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${percent}%;"></div></div>
+          </div>
+          <div class="pct">${percent}%</div>
+        </a>`);
+    }
+    box.innerHTML = rows.join("");
+  } catch (e) {
+    console.error(e);
+    box.innerHTML = `<div class="empty-state"><div class="big">🔥</div><h3>تعذر تحميل كورساتك</h3></div>`;
+  }
+}
+
+async function loadAttempts() {
+  const list = document.getElementById("attemptsList");
+  try {
+    const snap = await getDocs(collection(db, "students", student.id, "exams"));
+    if (snap.empty) {
+      list.innerHTML = `
+        <div class="empty-state">
+          <div class="big">📝</div>
+          <h3>لسه مقدمتش أي امتحان</h3>
+          <p>الامتحانات بتظهر جوه دروس الكورسات — استعرض الكورسات وابدأ.</p>
+          <a class="btn btn-primary" href="courses.html">استعرض الكورسات</a>
+        </div>`;
+      return;
+    }
+
+    list.innerHTML = snap.docs.map(d => {
+      const a = d.data();
+      const finished = a.finished === true;
+      const status = !finished ? "جاري" : (a.hasEssay && a.examGradingStatus !== "graded") ? "قيد التصحيح" : "خلصان";
+      const percent = typeof a.percent === "number" ? `${a.percent}%` : "—";
+      return `
+        <div class="attempt">
+          <div>
+            <b>${escapeHtml(a.examName || "امتحان")}</b>
+            <small>${status}${finished && typeof a.percent === "number" ? " — النتيجة: " + percent : ""}</small>
+          </div>
+          ${finished ? `<button class="btn btn-ghost" data-exam="${escapeHtml(a.examId || "")}">عرض النتيجة</button>` : ""}
+        </div>`;
+    }).join("");
+
+    list.querySelectorAll("button[data-exam]").forEach(btn => {
+      btn.onclick = () => showResult(btn.dataset.exam);
+    });
+
+  } catch (e) {
+    console.error(e);
+    list.innerHTML = `<div class="empty-state"><div class="big">🔥</div><h3>تعذر تحميل محاولاتك</h3></div>`;
+  }
+}
+
+function showResult(examId) {
+  if (!examId) return;
+  const panel = document.getElementById("resultPanel");
+  panel.style.marginTop = "16px";
+  panel.innerHTML = `<div class="skeleton" style="min-height:160px;"></div>`;
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  renderExamWidget(panel, examId, student, {});
+}
+</script>
+</body>
+</html>

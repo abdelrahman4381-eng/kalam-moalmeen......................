@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الرئيسية - EduNova</title>
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="platform.css">
+</head>
+<body class="app">
+
+<header class="topbar" id="topbar"></header>
+<div class="app-layout" id="appLayout">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main">
+    <div class="page-title" id="greetTitle">أهلاً بيك 👋</div>
+    <div class="page-sub">دي لمحة سريعة عن نشاطك في المنصة.</div>
+
+    <div class="stat-grid" id="statGrid">
+      <div class="skeleton" style="min-height:92px;"></div>
+      <div class="skeleton" style="min-height:92px;"></div>
+      <div class="skeleton" style="min-height:92px;"></div>
+    </div>
+
+    <div class="section-head" style="margin-top:6px;">
+      <div><h2>كورساتك الحالية</h2><p>كمّل من حيث ما وقفت.</p></div>
+    </div>
+    <div class="enrolled-grid" id="enrolledGrid" style="margin-bottom:22px;">
+      <div class="skeleton" style="min-height:150px;"></div>
+      <div class="skeleton" style="min-height:150px;"></div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="progress-ring-card glass" id="progressCard">
+        <div class="skeleton" style="width:100%;min-height:160px;"></div>
+      </div>
+      <div class="activity-card glass">
+        <h3>آخر امتحاناتك</h3>
+        <div id="recentExams"><div class="skeleton" style="min-height:160px;"></div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="footer">EduNova — Developed By Abdelrahman Mohamed</div>
+
+<script type="module">
+import {
+  db, doc, getDoc, collection, getDocs,
+  requireStudent, renderShell, fetchCourses, getEnrollment, canAccessCourse,
+  fetchFlatSections, courseProgressPercent, escapeHtml, safeImageUrl
+} from "./platform.js";
+
+const student = requireStudent();
+if (student) {
+  renderShell("home");
+  document.getElementById("greetTitle").textContent =
+    "أهلاً بيك، " + (student.name ? student.name.split(" ")[0] : "يا بطل") + " 👋";
+  load();
+}
+
+async function load() {
+  try {
+    const courses = await fetchCourses();
+    const enrolledCourses = [];
+    for (const c of courses) {
+      const enr = await getEnrollment(student.id, c.id);
+      const has = c.isFree || enr;
+      if (has) enrolledCourses.push({ course: c, enrollment: enr });
+    }
+
+    const examsSnap = await getDocs(collection(db, "students", student.id, "exams"));
+    const attempts = examsSnap.docs.map(d => d.data());
+    const finishedAttempts = attempts.filter(a => a.finished);
+    const passed = finishedAttempts.filter(a => typeof a.percent === "number" && a.percent >= 50).length;
+    const gradedPercents = finishedAttempts.filter(a => typeof a.percent === "number").map(a => a.percent);
+    const avgPercent = gradedPercents.length
+      ? Math.round(gradedPercents.reduce((s, p) => s + p, 0) / gradedPercents.length)
+      : 0;
+
+    renderStats(enrolledCourses.length, finishedAttempts.length, passed);
+    renderProgress(avgPercent, enrolledCourses.length);
+    renderRecentExams(finishedAttempts);
+    renderEnrolledCourses(enrolledCourses);
+  } catch (e) {
+    console.error(e);
+    document.getElementById("statGrid").innerHTML = `<div class="empty-state glass" style="grid-column:1/-1;"><div class="big">🔥</div><h3>تعذر تحميل بياناتك</h3></div>`;
+  }
+}
+
+function renderStats(enrolled, exams, passed) {
+  document.getElementById("statGrid").innerHTML = `
+    <div class="stat-card glass"><div><b>${enrolled}</b><small>كورسات حالية</small></div><div class="stat-ic a">🎓</div></div>
+    <div class="stat-card glass"><div><b>${exams}</b><small>امتحانات خلصتها</small></div><div class="stat-ic b">📝</div></div>
+    <div class="stat-card glass"><div><b>${passed}</b><small>امتحانات ناجح فيها</small></div><div class="stat-ic c">🏆</div></div>`;
+}
+
+function renderProgress(avgPercent, enrolled) {
+  const box = document.getElementById("progressCard");
+  const circumference = 2 * Math.PI * 52;
+  const offset = circumference - (avgPercent / 100) * circumference;
+  box.innerHTML = `
+    <svg width="140" height="140" viewBox="0 0 140 140">
+      <circle cx="70" cy="70" r="52" fill="none" stroke="var(--navy2)" stroke-width="12"/>
+      <circle cx="70" cy="70" r="52" fill="none" stroke="var(--blue)" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+        transform="rotate(-90 70 70)"/>
+      <text x="70" y="78" text-anchor="middle" font-size="26" font-weight="900" fill="var(--text)">${avgPercent}%</text>
+    </svg>
+    <h3>متوسط نتائجك في الامتحانات</h3>
+    <p>مقياس لأدائك في كل الامتحانات اللي خلصتها لحد دلوقتي.</p>
+    <a class="btn btn-primary btn-block" href="courses.html">${enrolled ? "كمل مذاكرة 📚" : "استعرض الكورسات 🚀"}</a>`;
+}
+
+function renderRecentExams(attempts) {
+  const box = document.getElementById("recentExams");
+  if (!attempts.length) {
+    box.innerHTML = `<div class="empty-state"><div class="big">📝</div><h3>لسه مقدمتش أي امتحان</h3><p>الامتحانات بتظهر جوه دروس الكورسات.</p></div>`;
+    return;
+  }
+  const sorted = [...attempts].sort((a, b) => (b.submitTime || 0) - (a.submitTime || 0)).slice(0, 5);
+  box.innerHTML = sorted.map(a => `
+    <div class="attempt">
+      <div><b>${escapeHtml(a.examName || "امتحان")}</b><small>${typeof a.percent === "number" ? "النتيجة: " + a.percent + "%" : "قيد التصحيح"}</small></div>
+    </div>`).join("");
+}
+
+async function renderEnrolledCourses(list) {
+  const grid = document.getElementById("enrolledGrid");
+  if (!list.length) {
+    grid.innerHTML = `<div class="empty-state glass" style="grid-column:1/-1;"><div class="big">🎓</div><h3>لسه مشتركتش في أي كورس</h3><p>استعرض الكورسات المتاحة وابدأ.</p><a class="btn btn-primary" href="courses.html">استعرض الكورسات</a></div>`;
+    return;
+  }
+  grid.innerHTML = list.map(() => `<div class="skeleton" style="min-height:150px;"></div>`).join("");
+
+  const cards = [];
+  for (const { course, enrollment } of list) {
+    let percent = 0;
+    try {
+      const { flat } = await fetchFlatSections(course.id);
+      percent = courseProgressPercent(flat, enrollment);
+    } catch (e) { /* ignore */ }
+    const img = safeImageUrl(course.thumbnail);
+    cards.push(`
+      <a class="enrolled-card" href="course-details.html?id=${encodeURIComponent(course.id)}">
+        <div class="enrolled-thumb">${img ? `<img src="${img}" alt="">` : "🎓"}</div>
+        <div class="enrolled-body">
+          <b>${escapeHtml(course.name || "كورس")}</b>
+          <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${percent}%;"></div></div>
+          <small>${percent}% مكتمل</small>
+        </div>
+      </a>`);
+  }
+  grid.innerHTML = cards.join("");
+}
+</script>
+</body>
+</html>

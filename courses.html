@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الكورسات - EduNova</title>
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="platform.css">
+</head>
+<body class="app">
+
+<header class="topbar" id="topbar"></header>
+<div class="app-layout" id="appLayout">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main">
+    <div class="page-title">الكورسات</div>
+    <div class="page-sub">كورسات كاملة بفيديوهات وملفات وامتحانات — اختار اللي يناسبك وابدأ التعلم.</div>
+    <div class="grade-tabs" id="gradeTabs"></div>
+    <div class="course-grid" id="courseGrid">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+  </main>
+</div>
+
+<div class="footer">EduNova — Developed By Abdelrahman Mohamed</div>
+
+<script type="module">
+import { requireStudent, renderShell, fetchCourses, escapeHtml, safeImageUrl } from "./platform.js";
+
+const student = requireStudent();
+if (student) {
+  renderShell("courses");
+  load();
+}
+
+const GRADES = ["الأول الثانوي", "الثاني الثانوي", "الثالث الثانوي"];
+let allCourses = [];
+let activeGrade = "الكل";
+
+function renderGradeTabs() {
+  const box = document.getElementById("gradeTabs");
+  const tabs = ["الكل", ...GRADES];
+  box.innerHTML = tabs.map(g => `
+    <button class="grade-tab ${g === activeGrade ? "active" : ""}" data-grade="${escapeHtml(g)}">${escapeHtml(g)}</button>
+  `).join("");
+  box.querySelectorAll(".grade-tab").forEach(btn => {
+    btn.onclick = () => { activeGrade = btn.dataset.grade; renderGradeTabs(); renderCourses(); };
+  });
+}
+
+async function load() {
+  const grid = document.getElementById("courseGrid");
+  try {
+    allCourses = await fetchCourses();
+    renderGradeTabs();
+
+    if (!allCourses.length) {
+      grid.innerHTML = `
+        <div class="empty-state glass" style="grid-column:1/-1;">
+          <div class="big">📭</div>
+          <h3>لسه مفيش كورسات متاحة</h3>
+          <p>تابعنا، هيتم إضافة كورسات قريبًا.</p>
+        </div>`;
+      return;
+    }
+    renderCourses();
+
+  } catch (e) {
+    console.error(e);
+    grid.innerHTML = `
+      <div class="empty-state glass" style="grid-column:1/-1;">
+        <div class="big">🔥</div>
+        <h3>حصلت مشكلة في تحميل الكورسات</h3>
+        <p>جرب تحدّث الصفحة تاني.</p>
+      </div>`;
+  }
+}
+
+function renderCourses() {
+  const grid = document.getElementById("courseGrid");
+  const courses = activeGrade === "الكل" ? allCourses : allCourses.filter(c => c.grade === activeGrade);
+
+  if (!courses.length) {
+    grid.innerHTML = `
+      <div class="empty-state glass" style="grid-column:1/-1;">
+        <div class="big">📭</div>
+        <h3>مفيش كورسات لـ${escapeHtml(activeGrade)} دلوقتي</h3>
+        <p>جرب صف دراسي تاني أو ارجع لـ"الكل".</p>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = courses.map(c => {
+    const img = safeImageUrl(c.thumbnail);
+    const badge = c.isFree
+      ? `<span class="price-badge free">مجاني</span>`
+      : `<span class="price-badge paid">${c.price ? escapeHtml(c.price) + " ج.م" : "مدفوع"}</span>`;
+    return `
+      <a class="exam-card glass" href="course-details.html?id=${encodeURIComponent(c.id)}">
+        <div class="thumb">
+          ${badge}
+          ${img ? `<img src="${img}" alt="">` : `<span class="ph">🎓</span>`}
+        </div>
+        <div class="body">
+          ${c.grade ? `<span class="grade-badge">${escapeHtml(c.grade)}</span>` : ""}
+          <h3>${escapeHtml(c.name || "كورس")}</h3>
+          <p class="desc">${escapeHtml(c.description || "كورس متاح دلوقتي على المنصة.")}</p>
+          <span class="btn btn-primary btn-block">عرض الكورس</span>
+        </div>
+      </a>`;
+  }).join("");
+}
+</script>
+</body>
+</html>

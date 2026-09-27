@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسجيل الدخول - EduNova</title>
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="platform.css">
+</head>
+<body class="center-page">
+
+<div id="nav"></div>
+
+<div class="auth-card">
+  <div class="hero-icon">🚀</div>
+  <h1>يلا بينا تسجل دخولك</h1>
+  <p class="sub">EduNova · منصة الكورسات</p>
+
+  <div class="field">
+    <label>رقم الموبايل</label>
+    <input id="phoneInput" class="ltr" placeholder="01012345678 📱" autocomplete="tel" inputmode="tel">
+  </div>
+  <div class="field">
+    <label>كلمة السر</label>
+    <input id="passwordInput" type="password" placeholder="كلمة السر 🔑" autocomplete="current-password">
+  </div>
+
+  <button class="btn btn-primary btn-block" id="loginBtn">يلا بينا! 🚀</button>
+  <div class="msg" id="msg"></div>
+
+  <div class="auth-foot">لسه معملتش حساب؟ <a href="signup.html">أنشئ حساب جديد</a></div>
+</div>
+
+<script type="module">
+import {
+  getStudent, startSession, checkPassword, normalizePhone, findStudentByPhone,
+  renderAuthTopbar, showLoading, hideLoading, showPopup
+} from "./platform.js";
+
+renderAuthTopbar();
+if (getStudent()) window.location.replace("home.html");
+
+const loginBtn = document.getElementById("loginBtn");
+const phoneInput = document.getElementById("phoneInput");
+const passwordInput = document.getElementById("passwordInput");
+
+loginBtn.onclick = async function () {
+  const phoneRaw = phoneInput.value.trim();
+  const password = passwordInput.value;
+
+  if (!phoneRaw || !password) {
+    showPopup("⌨️", "استنى بس 😄", "اكتب رقم الموبايل وكلمة السر الأول يا بطل 😄");
+    return;
+  }
+
+  const phone = normalizePhone(phoneRaw);
+  if (!phone) {
+    showPopup("❌", "الرقم مش صحيح", "تأكد إنك كاتب رقم الموبايل صح (مثلاً 01012345678)");
+    return;
+  }
+
+  showLoading("بنتأكد منك... 🔍");
+  loginBtn.disabled = true;
+
+  try {
+    const student = await findStudentByPhone(phone);
+
+    if (!student) {
+      hideLoading(); loginBtn.disabled = false;
+      showPopup("❌", "بيانات الدخول غلط 😅", "رقم الموبايل أو كلمة السر غلط 🤔 تأكد منهم وجرب تاني");
+      return;
+    }
+
+    if (!(await checkPassword(student, password))) {
+      hideLoading(); loginBtn.disabled = false;
+      showPopup("❌", "بيانات الدخول غلط 😅", "رقم الموبايل أو كلمة السر غلط 🤔 تأكد منهم وجرب تاني");
+      return;
+    }
+
+    await startSession(student.id, {
+      name: student.name, code: student.code, phone: student.phone || phone
+    });
+
+    showLoading("أهلاً بيك يا " + (student.name || "بطل") + " 🎉");
+    setTimeout(() => { window.location.href = "home.html"; }, 1200);
+
+  } catch (err) {
+    console.error(err);
+    hideLoading(); loginBtn.disabled = false;
+    showPopup("🔥", "حدث خطأ", "حصلت مشكلة بسيطة، جرب تاني كمان شوية 🙏");
+  }
+};
+
+[phoneInput, passwordInput].forEach(el => {
+  el.addEventListener("keydown", e => { if (e.key === "Enter") loginBtn.click(); });
+});
+</script>
+</body>
+</html>

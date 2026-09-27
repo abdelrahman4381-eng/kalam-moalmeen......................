@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إنشاء حساب - EduNova</title>
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="platform.css">
+</head>
+<body class="center-page">
+
+<div id="nav"></div>
+
+<div class="auth-card" style="width:480px;">
+  <div class="hero-icon">🎓</div>
+  <h1>إنشاء حساب جديد</h1>
+  <p class="sub">EduNova · منصة الكورسات</p>
+
+  <div class="step-row">
+    <i id="dot1" class="on"></i><i id="dot2"></i><i id="dot3"></i>
+  </div>
+
+  <!-- ===== STEP 1: DATA ===== -->
+  <div id="step1">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+      <div class="field" style="margin-bottom:0;">
+        <label>الاسم الأول</label>
+        <input id="firstNameInput" placeholder="الأول">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>الاسم الثاني</label>
+        <input id="middleNameInput" placeholder="الثاني">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>الاسم الثالث</label>
+        <input id="lastNameInput" placeholder="الثالث">
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:14px;">
+      <label>رقم موبايل الطالب (هيتم التحقق منه)</label>
+      <input id="phoneInput" class="ltr" placeholder="01012345678" autocomplete="tel">
+      <div class="hint">هنبعتلك عليه كود تحقق SMS، وهيبقى رقم الدخول بتاعك</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="field">
+        <label>رقم موبايل ولي الأمر (الأب)</label>
+        <input id="fatherPhoneInput" class="ltr" placeholder="01012345678" autocomplete="tel">
+      </div>
+      <div class="field">
+        <label>رقم موبايل الأم</label>
+        <input id="motherPhoneInput" class="ltr" placeholder="01012345678" autocomplete="tel">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>البريد الإلكتروني</label>
+      <input id="emailInput" class="ltr" type="email" placeholder="name@example.com" autocomplete="email">
+    </div>
+
+    <div class="field">
+      <label>كلمة السر</label>
+      <input id="passInput" type="password" placeholder="كلمة سر لا تقل عن 6 حروف" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>تأكيد كلمة السر</label>
+      <input id="pass2Input" type="password" placeholder="أعد كتابة كلمة السر" autocomplete="new-password">
+    </div>
+
+    <button class="btn btn-primary btn-block" id="sendCodeBtn">إرسال كود التحقق 📲</button>
+    <div class="msg" id="msg1"></div>
+  </div>
+
+  <!-- ===== STEP 2: VERIFY ===== -->
+  <div id="step2" class="hidden">
+    <p class="sub" style="margin-bottom:16px;">بعتنالك كود مكوّن من 6 أرقام على <span class="phone-echo" id="phoneEcho"></span></p>
+    <div class="field">
+      <label>كود التحقق</label>
+      <input id="otpInput" class="otp-input" maxlength="6" inputmode="numeric" placeholder="------">
+    </div>
+    <button class="btn btn-primary btn-block" id="verifyBtn">تأكيد الكود ✅</button>
+    <div class="resend-row">
+      <button class="link-btn" id="resendBtn" type="button">إعادة إرسال الكود</button>
+      <button class="link-btn" id="backBtn" type="button">تعديل البيانات</button>
+    </div>
+    <div class="msg" id="msg2"></div>
+  </div>
+
+  <!-- ===== STEP 3: DONE ===== -->
+  <div id="step3" class="hidden">
+    <div style="font-size:44px;margin-bottom:10px;">🎉</div>
+    <h1 style="margin-bottom:8px;">اتعمل حسابك بنجاح</h1>
+    <p class="sub" id="doneMsg"></p>
+    <a class="btn btn-primary btn-block" href="home.html">هيا بينا للمنصة 🚀</a>
+  </div>
+
+  <div class="auth-foot" id="authFoot">عندك حساب بالفعل؟ <a href="login.html">سجّل دخولك</a></div>
+</div>
+
+<script type="module">
+import {
+  db, doc, getDoc, setDoc, addDoc, collection, serverTimestamp,
+  getStudent, startSession, normalizePhone, isPhoneTaken,
+  randomSalt, hashPassword, generateUniqueCode,
+  renderAuthTopbar, showLoading, hideLoading, showPopup
+} from "./platform.js";
+
+renderAuthTopbar();
+if (getStudent()) window.location.replace("home.html");
+
+const step1 = document.getElementById("step1");
+const step2 = document.getElementById("step2");
+const step3 = document.getElementById("step3");
+const dot1 = document.getElementById("dot1"), dot2 = document.getElementById("dot2"), dot3 = document.getElementById("dot3");
+
+const firstNameInput = document.getElementById("firstNameInput");
+const middleNameInput = document.getElementById("middleNameInput");
+const lastNameInput = document.getElementById("lastNameInput");
+const phoneInput = document.getElementById("phoneInput");
+const fatherPhoneInput = document.getElementById("fatherPhoneInput");
+const motherPhoneInput = document.getElementById("motherPhoneInput");
+const emailInput = document.getElementById("emailInput");
+const passInput = document.getElementById("passInput");
+const pass2Input = document.getElementById("pass2Input");
+const msg1 = document.getElementById("msg1");
+const msg2 = document.getElementById("msg2");
+
+let pendingData = null;
+let devCode = null;
+
+function goStep(n) {
+  step1.classList.toggle("hidden", n !== 1);
+  step2.classList.toggle("hidden", n !== 2);
+  step3.classList.toggle("hidden", n !== 3);
+  dot1.classList.toggle("on", n >= 1);
+  dot2.classList.toggle("on", n >= 2);
+  dot3.classList.toggle("on", n >= 3);
+  document.getElementById("authFoot").classList.toggle("hidden", n === 3);
+}
+
+function setMsg1(text) { msg1.textContent = text; msg1.className = "msg error"; }
+function setMsg2(text) { msg2.textContent = text; msg2.className = "msg error"; }
+function isValidEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+
+async function sendOtp(phone, code) {
+  try {
+    const { getFunctions, httpsCallable } =
+      await import("https://www.gstatic.com/firebasejs/12.12.1/firebase-functions.js");
+    const { app } = await import("./platform.js");
+    const fns = getFunctions(app);
+    const call = httpsCallable(fns, "sendSmsOtp");
+    await call({ phone, code });
+    return true;
+  } catch (e) {
+    console.warn("sendSmsOtp function not available, using dev fallback:", e?.message || e);
+    return false;
+  }
+}
+
+document.getElementById("sendCodeBtn").onclick = async () => {
+  msg1.textContent = ""; msg1.className = "msg";
+
+  const firstName = firstNameInput.value.trim();
+  const middleName = middleNameInput.value.trim();
+  const lastName = lastNameInput.value.trim();
+  const phoneRaw = phoneInput.value.trim();
+  const fatherPhoneRaw = fatherPhoneInput.value.trim();
+  const motherPhoneRaw = motherPhoneInput.value.trim();
+  const email = emailInput.value.trim();
+  const password = passInput.value;
+  const password2 = pass2Input.value;
+
+  if (!firstName) return setMsg1("اكتب الاسم الأول");
+  if (!middleName) return setMsg1("اكتب الاسم الثاني");
+  if (!lastName) return setMsg1("اكتب الاسم الثالث");
+
+  const phone = normalizePhone(phoneRaw);
+  if (!phone) return setMsg1("رقم موبايل الطالب مش صحيح، جرب تكتبه بالشكل ده: 01012345678");
+
+  const fatherPhone = normalizePhone(fatherPhoneRaw);
+  if (!fatherPhone) return setMsg1("رقم موبايل الأب مش صحيح");
+
+  const motherPhone = normalizePhone(motherPhoneRaw);
+  if (!motherPhone) return setMsg1("رقم موبايل الأم مش صحيح");
+
+  if (!email || !isValidEmail(email)) return setMsg1("اكتب بريد إلكتروني صحيح");
+  if (!password || password.length < 6) return setMsg1("كلمة السر لازم تكون 6 حروف على الأقل");
+  if (password !== password2) return setMsg1("كلمتا السر مش متطابقتين");
+
+  document.getElementById("sendCodeBtn").disabled = true;
+  showLoading("بنتحقق من الرقم... 📲");
+
+  try {
+    if (await isPhoneTaken(phone)) {
+      hideLoading();
+      document.getElementById("sendCodeBtn").disabled = false;
+      return setMsg1("رقم الطالب ده متسجل بحساب قبل كده، جرب تسجل دخولك 👋");
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await setDoc(doc(db, "otpRequests", phone), {
+      code, attempts: 0, verified: false,
+      createdAt: Date.now(), expiresAt: Date.now() + 10 * 60 * 1000
+    });
+
+    const realSmsSent = await sendOtp(phone, code);
+    devCode = realSmsSent ? null : code;
+
+    pendingData = { firstName, middleName, lastName, phone, fatherPhone, motherPhone, email, password };
+    document.getElementById("phoneEcho").textContent = phone;
+    hideLoading();
+
+    if (devCode) {
+      showPopup("🧪", "وضع تجريبي — لسه مفيش بوابة SMS متوصلة",
+        `الكود بتاعك (لعرضه هنا مؤقتًا لحد ما يتوصل مزوّد SMS حقيقي): ${devCode}`);
+    }
+    goStep(2);
+  } catch (err) {
+    console.error(err);
+    hideLoading();
+    document.getElementById("sendCodeBtn").disabled = false;
+    setMsg1("حصلت مشكلة أثناء إرسال الكود، جرب تاني 🙏");
+  }
+};
+
+document.getElementById("backBtn").onclick = () => { goStep(1); };
+
+document.getElementById("resendBtn").onclick = async () => {
+  if (!pendingData) return;
+  const btn = document.getElementById("resendBtn");
+  btn.disabled = true;
+  showLoading("بنبعت الكود تاني... 📲");
+  try {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await setDoc(doc(db, "otpRequests", pendingData.phone), {
+      code, attempts: 0, verified: false,
+      createdAt: Date.now(), expiresAt: Date.now() + 10 * 60 * 1000
+    });
+    const realSmsSent = await sendOtp(pendingData.phone, code);
+    devCode = realSmsSent ? null : code;
+    hideLoading();
+    if (devCode) showPopup("🧪", "وضع تجريبي", `الكود الجديد: ${devCode}`);
+    else showPopup("✅", "اتبعت", "كود جديد اتبعتلك على رقمك 📲");
+  } catch (e) {
+    hideLoading();
+    showPopup("🔥", "حدث خطأ", "تعذر إعادة إرسال الكود، جرب تاني بعد شوية 🙏");
+  } finally {
+    setTimeout(() => { btn.disabled = false; }, 15000);
+  }
+};
+
+document.getElementById("verifyBtn").onclick = async () => {
+  setMsg2("");
+  const code = document.getElementById("otpInput").value.trim();
+  if (!/^\d{6}$/.test(code)) return setMsg2("اكتب الكود المكوّن من 6 أرقام كامل");
+
+  const verifyBtn = document.getElementById("verifyBtn");
+  verifyBtn.disabled = true;
+  showLoading("بنتأكد من الكود... 🔍");
+
+  try {
+    const ref = doc(db, "otpRequests", pendingData.phone);
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) { hideLoading(); verifyBtn.disabled = false; return setMsg2("الكود منتهي، اطلب كود جديد"); }
+    const data = snap.data();
+
+    if (Date.now() > data.expiresAt) { hideLoading(); verifyBtn.disabled = false; return setMsg2("الكود منتهي الصلاحية، اطلب كود جديد"); }
+    if ((data.attempts || 0) >= 6) { hideLoading(); verifyBtn.disabled = false; return setMsg2("محاولات كتير غلط، اطلب كود جديد"); }
+
+    if (data.code !== code) {
+      await setDoc(ref, { attempts: (data.attempts || 0) + 1 }, { merge: true });
+      hideLoading(); verifyBtn.disabled = false;
+      return setMsg2("الكود غلط، تأكد وجرب تاني");
+    }
+
+    await setDoc(ref, { verified: true }, { merge: true });
+
+    const fullName = `${pendingData.firstName} ${pendingData.middleName} ${pendingData.lastName}`;
+    const code2 = await generateUniqueCode();
+    const salt = randomSalt();
+    const passwordHash = await hashPassword(pendingData.password, salt);
+
+    const studentRef = await addDoc(collection(db, "students"), {
+      firstName: pendingData.firstName,
+      middleName: pendingData.middleName,
+      lastName: pendingData.lastName,
+      name: fullName,
+      phone: pendingData.phone,
+      phoneVerified: true,
+      fatherPhone: pendingData.fatherPhone,
+      motherPhone: pendingData.motherPhone,
+      email: pendingData.email,
+      code: code2,
+      passwordHash,
+      passwordSalt: salt,
+      createdAt: serverTimestamp()
+    });
+
+    await startSession(studentRef.id, { name: fullName, code: code2, phone: pendingData.phone });
+
+    hideLoading();
+    document.getElementById("doneMsg").innerHTML =
+      `أهلاً بيك يا ${pendingData.firstName} 👋<br>كود الطالب بتاعك: <b>${code2}</b>`;
+    goStep(3);
+
+  } catch (err) {
+    console.error(err);
+    hideLoading(); verifyBtn.disabled = false;
+    setMsg2("حصلت مشكلة، جرب تاني 🙏");
+  }
+};
+
+document.getElementById("otpInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("verifyBtn").click();
+});
+</script>
+</body>
+</html>
