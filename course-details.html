@@ -275,7 +275,7 @@ function renderVideoSection(main, section) {
   if (!videoUrl) return;
 
   const wrap = document.getElementById("videoWrap");
-  const { video, destroy } = createCustomPlayer(wrap, videoUrl);
+  const { video, destroy } = createCustomPlayer(wrap, videoUrl, { name: student.name, phone: student.phone });
   activeVideoDestroy = destroy;
 
   video.addEventListener("ended", async () => {
