@@ -193,9 +193,15 @@ export function randomCode() {
 }
 
 /* ---- Custom branded video player (unchanged) ---- */
-export function createCustomPlayer(container, videoUrl) {
+export function createCustomPlayer(container, videoUrl, watermark) {
   container.classList.add("ep-player");
   container.oncontextmenu = () => false;
+
+  const watermarkName = watermark?.name ? escapeHtml(watermark.name) : "";
+  const watermarkPhone = watermark?.phone ? escapeHtml(watermark.phone) : "";
+  const watermarkHtml = (watermarkName || watermarkPhone)
+    ? `<div class="ep-watermark" id="epWatermark">${watermarkName}${watermarkName && watermarkPhone ? " — " : ""}<span>${watermarkPhone}</span></div>`
+    : "";
 
   container.innerHTML = `
     <video class="ep-video" playsinline disablePictureInPicture
@@ -203,6 +209,7 @@ export function createCustomPlayer(container, videoUrl) {
            oncontextmenu="return false">
       <source src="${videoUrl}">
     </video>
+    ${watermarkHtml}
     <button class="ep-bigplay" type="button" aria-label="تشغيل">▶</button>
     <div class="ep-bar">
       <button class="ep-play" type="button" aria-label="تشغيل/إيقاف">▶</button>
@@ -226,6 +233,7 @@ export function createCustomPlayer(container, videoUrl) {
   const volSlider = container.querySelector(".ep-vol");
   const fsBtn = container.querySelector(".ep-fs");
   const spinner = container.querySelector(".ep-spinner");
+  const watermarkEl = container.querySelector("#epWatermark");
 
   function fmt(t) {
     if (!isFinite(t)) return "00:00";
@@ -258,7 +266,33 @@ export function createCustomPlayer(container, videoUrl) {
     else container.requestFullscreen?.();
   };
 
-  function destroy() { video.pause(); video.removeAttribute("src"); video.load(); }
+  /* Drift the name/phone watermark to a new random spot every few
+     seconds so a screen recording can't just crop it out. Bounds are
+     read from the live container size, so it also adapts on fullscreen
+     enter/exit (where the container is much bigger). */
+  let watermarkTimer = null;
+  if (watermarkEl) {
+    const moveWatermark = () => {
+      const w = container.clientWidth || 300;
+      const h = container.clientHeight || 200;
+      const wmW = watermarkEl.offsetWidth || 120;
+      const wmH = watermarkEl.offsetHeight || 26;
+      const maxX = Math.max(10, w - wmW - 14);
+      const maxY = Math.max(10, h - wmH - 54); /* keep clear of the control bar */
+      watermarkEl.style.left = (10 + Math.random() * maxX) + "px";
+      watermarkEl.style.top = (10 + Math.random() * maxY) + "px";
+    };
+    moveWatermark();
+    watermarkTimer = setInterval(moveWatermark, 4500);
+    document.addEventListener("fullscreenchange", moveWatermark);
+  }
+
+  function destroy() {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    if (watermarkTimer) clearInterval(watermarkTimer);
+  }
   return { video, destroy };
 }
 
