@@ -478,72 +478,216 @@ export async function renderExamWidget(container, examId, student, opts = {}) {
     return;
   }
 
+  /* ---- state (shared by all the render* helpers below) ---- */
   const answers = {};
-  let timeLeft = (examData.time || 10) * 60;
+  let currentIndex = 0;
+  let timeLeft = (examData.time || 0) * 60;
   let timerHandle = null;
 
-  container.innerHTML = `
-    <div class="exam-widget">
-      <div class="exam-widget-head">
+  renderStartCard();
+
+  /* ---- 1) start screen + start confirmation ---- */
+  function renderStartCard() {
+    container.innerHTML = `
+      <div class="exam-widget exam-start-card">
+        <div class="big">📝</div>
         <h3>${escapeHtml(examData.name || "امتحان")}</h3>
-        ${examData.time ? `<span class="exam-timer" id="examWidgetTimer">--:--</span>` : ""}
-      </div>
-      <div id="examWidgetQuestions"></div>
-      <button class="btn btn-primary btn-block btn-lg" id="examWidgetSubmit">تسليم الامتحان ✅</button>
-    </div>
-  `;
-
-  const qBox = container.querySelector("#examWidgetQuestions");
-  qBox.innerHTML = questions.map((q, i) => questionHtml(q, i)).join("");
-
-  qBox.querySelectorAll(".exam-opt").forEach(opt => {
-    opt.addEventListener("click", () => {
-      const qi = opt.dataset.q, oi = opt.dataset.o;
-      answers[qi] = Number(oi);
-      qBox.querySelectorAll(`.exam-opt[data-q="${qi}"]`).forEach(o => o.classList.remove("selected"));
-      opt.classList.add("selected");
-      qBox.querySelectorAll(`.exam-opt[data-q="${qi}"] input`).forEach(inp => { inp.checked = false; });
-      opt.querySelector("input").checked = true;
-    });
-  });
-  qBox.querySelectorAll(".exam-essay textarea").forEach(ta => {
-    ta.addEventListener("input", () => { answers[ta.dataset.q] = { answer: ta.value }; });
-  });
-
-  if (examData.time) {
-    const timerEl = container.querySelector("#examWidgetTimer");
-    const tick = () => {
-      const m = Math.floor(timeLeft / 60), s = timeLeft % 60;
-      timerEl.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-      if (timeLeft <= 0) { clearInterval(timerHandle); submit(true); return; }
-      timeLeft--;
+        <p>عدد الأسئلة: ${questions.length}${examData.time ? ` — الوقت المتاح: ${examData.time} دقيقة` : ""}</p>
+        <button class="btn btn-primary btn-lg btn-block" id="examStartBtn">ابدأ الامتحان 🚀</button>
+      </div>`;
+    container.querySelector("#examStartBtn").onclick = () => {
+      showConfirm({
+        icon: "🚀",
+        title: "جاهز تبدأ الامتحان؟",
+        message: `${examData.time ? `هيبدأ العد التنازلي (${examData.time} دقيقة) فور ما تدوس "ابدأ".` : "هتقدر تتنقل بين الأسئلة براحتك."} تأكد إنك جاهز قبل ما تبدأ.`,
+        buttons: [
+          { label: "ابدأ الامتحان ✅", className: "btn-primary", onClick: startExam },
+          { label: "لسه لأ", className: "btn-ghost" }
+        ]
+      });
     };
-    tick();
-    timerHandle = setInterval(tick, 1000);
   }
 
-  container.querySelector("#examWidgetSubmit").onclick = () => submit(false);
+  /* ---- 2) the exam itself: header/timer/stats/circles/nav are built
+     ONCE here and never rebuilt — only their contents are updated, and
+     only #examBody's innerHTML changes when moving between questions,
+     so the exam's position on the page never jumps. ---- */
+  function startExam() {
+    container.innerHTML = `
+      <div class="exam-widget">
+        <div class="exam-head">
+          <h3>${escapeHtml(examData.name || "امتحان")}</h3>
+          ${examData.time ? `<div class="exam-timer-big" id="examTimerBig">--:--</div>` : ""}
+          <button class="btn btn-danger btn-block" id="examEndBtn">إنهاء الاختبار 🏁</button>
+          <div class="exam-stats-rows">
+            <div class="stat-row"><span>عدد الأسئلة</span><b>${questions.length}</b></div>
+            <div class="stat-row"><span>عدد المحلول</span><b id="statSolved">0</b></div>
+            <div class="stat-row"><span>عدد الغير محلول</span><b id="statUnsolved">${questions.length}</b></div>
+          </div>
+          <div class="exam-circles" id="examCircles"></div>
+          <div class="exam-nav-row">
+            <button type="button" class="btn btn-ghost" id="examPrevBtn">‹ السابق</button>
+            <button type="button" class="btn btn-ghost" id="examNextBtn">التالي ›</button>
+          </div>
+        </div>
+        <div class="exam-body" id="examBody"></div>
+      </div>`;
+
+    container.querySelector("#examEndBtn").onclick = confirmSubmit;
+    container.querySelector("#examPrevBtn").onclick = () => goTo(currentIndex - 1);
+    container.querySelector("#examNextBtn").onclick = () => goTo(currentIndex + 1);
+
+    if (examData.time) {
+      const timerEl = container.querySelector("#examTimerBig");
+      const tick = () => {
+        const m = Math.floor(timeLeft / 60), s = timeLeft % 60;
+        timerEl.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        if (timeLeft <= 0) { clearInterval(timerHandle); submit(true); return; }
+        timeLeft--;
+      };
+      tick();
+      timerHandle = setInterval(tick, 1000);
+    }
+
+    renderCircles();
+    renderQuestionBody();
+  }
+
+  function isAnswered(i) {
+    const a = answers[i];
+    if (a === undefined) return false;
+    if (typeof a === "object") return !!(a.answer && a.answer.trim());
+    return true;
+  }
+
+  function updateStats() {
+    const solved = questions.filter((_, i) => isAnswered(i)).length;
+    const solvedEl = container.querySelector("#statSolved");
+    const unsolvedEl = container.querySelector("#statUnsolved");
+    if (solvedEl) solvedEl.textContent = solved;
+    if (unsolvedEl) unsolvedEl.textContent = questions.length - solved;
+  }
+
+  function renderCircles() {
+    const box = container.querySelector("#examCircles");
+    if (!box) return;
+    box.innerHTML = questions.map((_, i) => `
+      <button type="button" class="q-circle ${i === currentIndex ? "current" : ""} ${isAnswered(i) ? "answered" : ""}" data-i="${i}">${i + 1}</button>
+    `).join("");
+    box.querySelectorAll(".q-circle").forEach(btn => { btn.onclick = () => goTo(Number(btn.dataset.i)); });
+  }
+
+  function updateNavButtons() {
+    const prevBtn = container.querySelector("#examPrevBtn");
+    const nextBtn = container.querySelector("#examNextBtn");
+    if (prevBtn) prevBtn.disabled = currentIndex === 0;
+    if (nextBtn) nextBtn.disabled = currentIndex === questions.length - 1;
+  }
+
+  function goTo(i) {
+    if (i < 0 || i >= questions.length) return;
+    currentIndex = i;
+    renderQuestionBody();
+    renderCircles();
+    updateNavButtons();
+  }
+
+  function examImageHtml(url) {
+    return `<div class="exam-img-thumb" title="دوس للتكبير"><img src="${safeImageUrl(url)}" alt=""><span class="zoom-hint">🔍 دوس للتكبير</span></div>`;
+  }
+
+  function renderQuestionBody() {
+    const body = container.querySelector("#examBody");
+    if (!body) return;
+    const q = questions[currentIndex];
+    const hasImage = !!safeImageUrl(q.image);
+
+    if (q.type === "essay") {
+      const existing = answers[currentIndex];
+      const savedText = (existing && typeof existing === "object") ? (existing.answer || "") : "";
+      body.innerHTML = `
+        <div class="exam-q exam-essay">
+          <div class="q-num">سؤال ${currentIndex + 1} من ${questions.length} (مقالي)</div>
+          <div class="exam-q-layout">
+            <div class="exam-q-main">
+              <div class="q-text">${escapeHtml(q.text || "")}</div>
+              <textarea id="essayAnswerInput" placeholder="اكتب إجابتك هنا...">${escapeHtml(savedText)}</textarea>
+            </div>
+            ${hasImage ? examImageHtml(q.image) : ""}
+          </div>
+        </div>`;
+      body.querySelector("#essayAnswerInput").addEventListener("input", (e) => {
+        answers[currentIndex] = { answer: e.target.value };
+        updateStats(); renderCircles();
+      });
+    } else {
+      const choices = q.answers || [];
+      const selected = answers[currentIndex];
+      body.innerHTML = `
+        <div class="exam-q">
+          <div class="q-num">سؤال ${currentIndex + 1} من ${questions.length}</div>
+          <div class="exam-q-layout">
+            <div class="exam-q-main">
+              <div class="q-text">${escapeHtml(q.text || "")}</div>
+              <div class="exam-opts">
+                ${choices.map((o, oi) => `
+                  <label class="exam-opt ${selected === oi ? "selected" : ""}" data-o="${oi}">
+                    <input type="radio" name="examQ" ${selected === oi ? "checked" : ""}>
+                    <span>${escapeHtml(o)}</span>
+                  </label>`).join("")}
+              </div>
+            </div>
+            ${hasImage ? examImageHtml(q.image) : ""}
+          </div>
+        </div>`;
+      body.querySelectorAll(".exam-opt").forEach(opt => {
+        opt.addEventListener("click", () => {
+          answers[currentIndex] = Number(opt.dataset.o);
+          body.querySelectorAll(".exam-opt").forEach(o => { o.classList.remove("selected"); o.querySelector("input").checked = false; });
+          opt.classList.add("selected");
+          opt.querySelector("input").checked = true;
+          updateStats(); renderCircles();
+        });
+      });
+    }
+
+    const zoomEl = body.querySelector(".exam-img-thumb");
+    if (zoomEl) zoomEl.onclick = () => openLightbox(zoomEl.querySelector("img").src);
+
+    updateStats();
+    updateNavButtons();
+  }
+
+  /* ---- 3) submit confirmation ---- */
+  function confirmSubmit() {
+    showConfirm({
+      icon: "😎",
+      title: "عارفين إنك شاطر 😎",
+      message: "بس ولا يهمك، لسه ممكن تراجع وتكمل مراجعة إجاباتك قبل التسليم النهائي.",
+      buttons: [
+        { label: "سلّم الامتحان ✅", className: "btn-primary", onClick: () => submit(false) },
+        { label: "أراجع إجاباتي 👀", className: "btn-ghost" }
+      ]
+    });
+  }
 
   async function submit(auto) {
     if (timerHandle) clearInterval(timerHandle);
-    const btn = container.querySelector("#examWidgetSubmit");
-    if (btn) { btn.disabled = true; btn.textContent = "بنحسبلك النتيجة... ⏳"; }
+    const endBtn = container.querySelector("#examEndBtn");
+    if (endBtn) { endBtn.disabled = true; endBtn.textContent = "بنحسبلك النتيجة... ⏳"; }
 
     let correct = 0, wrong = 0, blank = 0, earnedPoints = 0, totalPoints = 0;
-    const mcqList = questions.filter(q => q.type === "mcq");
-    mcqList.forEach((q, i) => {
-      const qi = questions.indexOf(q);
+    questions.forEach((q, i) => {
+      if (q.type !== "mcq") return;
       const pts = Number(q.points ?? 1) || 1;
       totalPoints += pts;
-      const a = answers[qi];
+      const a = answers[i];
       if (a === undefined) blank++;
       else if (a === q.correct) { correct++; earnedPoints += pts; }
       else wrong++;
     });
 
-    const essayList = questions
-      .map((q, i) => ({ q, i }))
-      .filter(({ q }) => q.type === "essay");
+    const essayList = questions.map((q, i) => ({ q, i })).filter(({ q }) => q.type === "essay");
     const hasEssay = essayList.length > 0;
     const essayTotalPoints = essayList.reduce((s, e) => s + Number(e.q.points || 0), 0);
     const percent = hasEssay ? null : (totalPoints ? Math.round((earnedPoints / totalPoints) * 100) : 0);
@@ -586,35 +730,9 @@ export async function renderExamWidget(container, examId, student, opts = {}) {
       if (opts.onFinish) opts.onFinish(attemptData);
     } catch (e) {
       console.error(e);
-      if (btn) { btn.disabled = false; btn.textContent = "تسليم الامتحان ✅"; }
+      if (endBtn) { endBtn.disabled = false; endBtn.textContent = "إنهاء الاختبار 🏁"; }
       showPopup("🔥", "حصلت مشكلة", "تعذر تسليم الامتحان، جرب تاني 🙏");
     }
-  }
-
-  function questionHtml(q, i) {
-    if (q.type === "essay") {
-      return `
-        <div class="exam-q exam-essay">
-          <div class="q-num">سؤال ${i + 1} (مقالي)</div>
-          <div class="q-text">${escapeHtml(q.text || "")}</div>
-          ${safeImageUrl(q.image) ? `<img src="${safeImageUrl(q.image)}" alt="">` : ""}
-          <textarea data-q="${i}" placeholder="اكتب إجابتك هنا..."></textarea>
-        </div>`;
-    }
-    const opts = q.options || [];
-    return `
-      <div class="exam-q">
-        <div class="q-num">سؤال ${i + 1}</div>
-        <div class="q-text">${escapeHtml(q.text || "")}</div>
-        ${safeImageUrl(q.image) ? `<img src="${safeImageUrl(q.image)}" alt="">` : ""}
-        <div class="exam-opts">
-          ${opts.map((o, oi) => `
-            <label class="exam-opt" data-q="${i}" data-o="${oi}">
-              <input type="radio" name="q${i}">
-              <span>${escapeHtml(o)}</span>
-            </label>`).join("")}
-        </div>
-      </div>`;
   }
 }
 
@@ -641,11 +759,11 @@ function reviewHtml(attempt, questions) {
     const i = questions.indexOf(q);
     const a = answers[i];
     const isCorrect = a === q.correct;
-    const givenText = a === undefined ? "من غير إجابة" : (q.options?.[a] ?? "—");
+    const givenText = a === undefined ? "من غير إجابة" : (q.answers?.[a] ?? "—");
     return `
       <div class="exam-review-q ${a === undefined ? "" : isCorrect ? "correct" : "wrong"}">
         <div class="q-text">${escapeHtml(q.text || "")}</div>
-        <small class="${isCorrect ? "ok" : "bad"}">إجابتك: ${escapeHtml(givenText)}${!isCorrect ? " — الصح: " + escapeHtml(q.options?.[q.correct] ?? "") : ""}</small>
+        <small class="${isCorrect ? "ok" : "bad"}">إجابتك: ${escapeHtml(givenText)}${!isCorrect ? " — الصح: " + escapeHtml(q.answers?.[q.correct] ?? "") : ""}</small>
       </div>`;
   }).join("");
   return rows ? `<div class="exam-review">${rows}</div>` : "";
@@ -765,4 +883,51 @@ export function showPopup(icon, title, message, onClose) {
     popup.classList.remove("show");
     if (onClose) onClose();
   };
+}
+
+/* Multi-button confirmation modal (start-exam / submit-exam prompts).
+   opts: { icon, title, message, buttons: [{ label, className, onClick }] } */
+export function showConfirm(opts) {
+  const wrap = document.createElement("div");
+  wrap.className = "modal";
+  wrap.innerHTML = `
+    <div class="modal-box glass">
+      <div class="icon">${opts.icon || "❓"}</div>
+      <h2>${escapeHtml(opts.title || "")}</h2>
+      <p>${escapeHtml(opts.message || "")}</p>
+      <div class="confirm-btn-row"></div>
+    </div>`;
+  document.body.appendChild(wrap);
+
+  const row = wrap.querySelector(".confirm-btn-row");
+  (opts.buttons || []).forEach(b => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn " + (b.className || "btn-ghost") + " btn-block";
+    btn.textContent = b.label;
+    btn.onclick = () => {
+      close();
+      if (b.onClick) b.onClick();
+    };
+    row.appendChild(btn);
+  });
+
+  function close() {
+    wrap.classList.remove("show");
+    setTimeout(() => wrap.remove(), 200);
+  }
+  requestAnimationFrame(() => wrap.classList.add("show"));
+  return close;
+}
+
+/* Fullscreen image lightbox — used to zoom exam question images. */
+export function openLightbox(url) {
+  const wrap = document.createElement("div");
+  wrap.className = "lightbox";
+  wrap.innerHTML = `<img src="${url}" alt=""><button type="button" class="lightbox-close" aria-label="إغلاق">✕</button>`;
+  document.body.appendChild(wrap);
+  const close = () => wrap.remove();
+  wrap.onclick = close;
+  wrap.querySelector(".lightbox-close").onclick = close;
+  requestAnimationFrame(() => wrap.classList.add("show"));
 }
