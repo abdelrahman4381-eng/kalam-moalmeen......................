@@ -24,6 +24,9 @@
   --danger:#E5605A;
   --danger-bg:rgba(229,96,90,0.16);
 
+  --player-red:#E51E24;
+  --player-red-dark:#B71C1C;
+
   --text:#FFFFFF;
   --muted:#AAB5C7;
   --soft:#6F8199;
@@ -319,16 +322,41 @@ body.app{ min-height:100vh; }
 
 .ep-player{ position:relative; width:100%; border-radius:13px; overflow:hidden; background:#05060A; user-select:none; border:1px solid var(--line); box-shadow:var(--shadow-md); }
 .ep-video{ width:100%; display:block; max-height:60vh; background:#000; aspect-ratio:16/9; object-fit:cover; }
-.ep-bigplay{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:58px; height:58px; border-radius:50%; border:none; cursor:pointer; background:rgba(21,152,237,0.92); color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 10px 28px rgba(0,0,0,0.4); transition:.15s ease; z-index:3; }
-.ep-bigplay:hover{ background:var(--blue); transform:translate(-50%,-50%) scale(1.06); }
+.ep-bigplay{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:58px; height:58px; border-radius:50%; border:none; cursor:pointer; background:rgba(229,30,36,0.92); color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center; box-shadow:0 10px 28px rgba(0,0,0,0.4); transition:.15s ease; z-index:3; }
+.ep-bigplay:hover{ background:var(--player-red); transform:translate(-50%,-50%) scale(1.06); }
 .ep-bigplay.hidden{ display:none; }
 .ep-bar{ position:absolute; left:0; right:0; bottom:0; z-index:3; display:flex; align-items:center; gap:10px; padding:10px 14px; background:linear-gradient(0deg, rgba(0,0,0,0.78), rgba(0,0,0,0)); direction:ltr; }
 .ep-bar button{ background:none; border:none; color:#fff; font-size:16px; cursor:pointer; width:26px; height:26px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .ep-time, .ep-dur{ font-size:11px; color:#E2E8F0; font-weight:700; flex-shrink:0; min-width:36px; }
-.ep-seek{ flex:1; accent-color:var(--blue); cursor:pointer; }
-.ep-vol{ width:64px; accent-color:var(--blue); cursor:pointer; }
-.ep-spinner{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:34px; height:34px; border-radius:50%; z-index:2; border:3px solid rgba(255,255,255,0.25); border-top-color:#fff; animation:ep-spin .8s linear infinite; }
+.ep-seek{ flex:1; accent-color:var(--player-red); cursor:pointer; }
+.ep-vol{ width:64px; accent-color:var(--player-red); cursor:pointer; }
+.ep-spinner{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:34px; height:34px; border-radius:50%; z-index:2; border:3px solid rgba(255,255,255,0.25); border-top-color:var(--player-red); animation:ep-spin .8s linear infinite; }
 .ep-spinner.hidden{ display:none; }
+
+/* Moving anti-piracy watermark (student name + phone) drifting over the video */
+.ep-watermark{
+  position:absolute; z-index:4; top:14px; left:14px;
+  color:#FF3B3B; background:rgba(0,0,0,0.38); backdrop-filter:blur(1px);
+  font-size:11.5px; font-weight:800; padding:5px 11px; border-radius:8px;
+  pointer-events:none; white-space:nowrap; text-shadow:0 1px 3px rgba(0,0,0,0.6);
+  transition:top 1.2s ease, left 1.2s ease;
+}
+.ep-watermark span{ direction:ltr; unicode-bidi:embed; }
+
+/* Fullscreen: contain instead of cover so the bottom of the video never
+   gets cropped, and center it in the available space. */
+.ep-player:fullscreen,
+.ep-player:-webkit-full-screen,
+.ep-player:-moz-full-screen{
+  width:100vw; height:100vh; max-width:none; border-radius:0;
+  display:flex; align-items:center; justify-content:center; background:#000;
+}
+.ep-player:fullscreen .ep-video,
+.ep-player:-webkit-full-screen .ep-video,
+.ep-player:-moz-full-screen .ep-video{
+  width:auto; height:auto; max-width:100vw; max-height:100vh;
+  aspect-ratio:auto; object-fit:contain;
+}
 @keyframes ep-spin{ to{ transform:translate(-50%,-50%) rotate(360deg); } }
 
 .video-meta{ background:linear-gradient(135deg,var(--card-soft),#0D1727); border:1px solid var(--line); border-top:none; border-radius:0 0 13px 13px; padding:14px 17px; margin-top:-1px; }
