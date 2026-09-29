@@ -349,16 +349,38 @@ body.app{ min-height:100vh; }
    height:100% has no real containing block to resolve against and
    the player only renders at its natural content height — leaving
    the rest of the screen black. This was the actual bug on both
-   desktop and mobile, not a viewport-unit quirk. */
-.ep-player:fullscreen,
-.ep-player:-webkit-full-screen,
+   desktop and mobile, not a viewport-unit quirk.
+   IMPORTANT: each vendor-prefixed pseudo-class gets its OWN standalone
+   rule below, never grouped together with commas — grouping a
+   selector Chromium doesn't recognize (like the legacy Firefox-only
+   :-moz-full-screen) into the same comma list as :fullscreen makes
+   Chromium silently drop the *entire* rule, so none of it — not even
+   the valid :fullscreen part — was ever actually applying. Verified
+   with a headless-browser test: the grouped form resolved max-height
+   to the unfullscreened value, the separated form resolved to 100%. */
+.ep-player:fullscreen{
+  position:fixed !important; inset:0 !important; margin:0 !important;
+  width:100% !important; height:100% !important; max-width:none; max-height:none; border-radius:0;
+  display:flex; align-items:center; justify-content:center; background:#000; z-index:2147483647;
+}
+.ep-player:-webkit-full-screen{
+  position:fixed !important; inset:0 !important; margin:0 !important;
+  width:100% !important; height:100% !important; max-width:none; max-height:none; border-radius:0;
+  display:flex; align-items:center; justify-content:center; background:#000; z-index:2147483647;
+}
 .ep-player:-moz-full-screen{
   position:fixed !important; inset:0 !important; margin:0 !important;
   width:100% !important; height:100% !important; max-width:none; max-height:none; border-radius:0;
   display:flex; align-items:center; justify-content:center; background:#000; z-index:2147483647;
 }
-.ep-player:fullscreen .ep-video,
-.ep-player:-webkit-full-screen .ep-video,
+.ep-player:fullscreen .ep-video{
+  width:100% !important; height:100% !important; max-width:100%; max-height:100%;
+  object-fit:contain;
+}
+.ep-player:-webkit-full-screen .ep-video{
+  width:100% !important; height:100% !important; max-width:100%; max-height:100%;
+  object-fit:contain;
+}
 .ep-player:-moz-full-screen .ep-video{
   width:100% !important; height:100% !important; max-width:100%; max-height:100%;
   object-fit:contain;
